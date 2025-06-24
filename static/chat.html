@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>💬 ChatSpace</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+    }
+
+    .chat-container {
+      display: flex;
+      height: 100vh;
+      background-color: #1a1a2e;
+      color: #fff;
+    }
+
+    .user-list {
+      width: 25%;
+      padding: 1rem;
+      background: #16213e;
+      border-right: 2px solid #0f3460;
+      overflow-y: auto;
+    }
+
+    .user-list h2, .user-list h3 {
+      margin-top: 0;
+      color: #00bcd4;
+    }
+
+    .user {
+      padding: 8px;
+      border-radius: 5px;
+      margin-bottom: 5px;
+      cursor: pointer;
+      background-color: #1a1a40;
+      transition: 0.3s;
+    }
+
+    .user:hover, .user.active {
+      background-color: #0f3460;
+    }
+
+    .chat-box {
+      width: 75%;
+      display: flex;
+      flex-direction: column;
+      padding: 1rem;
+      background: #0f3460;
+    }
+
+    .chat-box h3 {
+      margin: 0 0 10px 0;
+      color: #03c4a1;
+    }
+
+    .messages {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      border-radius: 5px;
+      background-color: #1a1a40;
+      margin-bottom: 10px;
+    }
+
+    .message {
+      margin: 5px 0;
+      max-width: 80%;
+    }
+
+    .message.sent {
+      text-align: right;
+      color: #9effa9;
+    }
+
+    .message.received {
+      text-align: left;
+      color: #a9d7ff;
+    }
+
+    .timestamp {
+      font-size: 0.75em;
+      color: #bbb;
+    }
+
+    .chat-input {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .chat-input input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 4px;
+      border: none;
+      outline: none;
+    }
+
+    .chat-input button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      background-color: #00bcd4;
+      color: white;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .chat-input button:hover {
+      background-color: #0097a7;
+    }
+
+    video {
+      width: 160px;
+      height: 120px;
+      background-color: black;
+      border: 2px solid #00bcd4;
+      border-radius: 5px;
+    }
+
+    #localVideo {
+      margin-left: auto;
+    }
+
+    .video-box {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body onload="initChat()">
+  <div class="chat-container">
+    <div class="user-list">
+      <h2>👤 Logged in as: <span id="logged-user">...</span></h2>
+      <h3>📜 Users</h3>
+      <div id="userList"></div>
+      <button onclick="logout()">🚪 Logout</button>
+    </div>
+
+    <div class="chat-box">
+      <h3>💬 Chat with: <span id="selectedUser">None</span></h3>
+      <div id="messages" class="messages"></div>
+
+      <div class="chat-input">
+        <input type="text" id="messageInput" placeholder="Type a message..." />
+        <button onclick="sendMessage()">📨</button>
+        <button onclick="startCall()">📞</button>
+        <button onclick="shareScreen()">🖥️</button>
+      </div>
+
+      <div class="video-box">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <video id="remoteVideo" autoplay playsinline></video>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    const BASE_URL = "http://localhost:8000";
+    let currentUser = null;
+    let selectedUser = null;
+    let selectedThreadId = null;
+    let socket = null;
+
+    // WebRTC globals
+    let peerConnection;
+    let localStream;
+    let targetSid;
+
+    async function initChat() {
+      const user = localStorage.getItem("chatspaceUser");
+      if (!user) return window.location.href = "/login.html";
+
+      currentUser = JSON.parse(user);
+      document.getElementById("logged-user").textContent = currentUser.username;
+
+      socket = io(BASE_URL);
+      socket.emit("join", { username: currentUser.username });
+
+      socket.on("chat_message", data => {
+        if (data.to === currentUser.username) {
+          appendMessage(data, false);
+        }
+      });
+
+      socket.on("offer", async data => {
+        targetSid = data.from;
+        await setupMedia();
+        setupPeer();
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit("answer_call", { to: targetSid, answer });
+      });
+
+      socket.on("answer", data => {
+        peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+      });
+
+      socket.on("ice_candidate", data => {
+        peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      });
+
+      loadUsers();
+    }
+
+    async function loadUsers() {
+      try {
+        const res = await fetch(`${BASE_URL}/chat/users`, {
+          headers: { Authorization: `Bearer ${currentUser.token}` }
+        });
+        const users = await res.json();
+        const userList = document.getElementById("userList");
+        userList.innerHTML = "";
+
+        users.forEach(u => {
+          const div = document.createElement("div");
+          div.className = "user";
+          div.textContent = u.username;
+          div.onclick = () => startThread(u.username, div);
+          userList.appendChild(div);
+        });
+      } catch (err) {
+        console.error("❌ Failed to load users", err);
+      }
+    }
+
+    async function startThread(username, el) {
+      const res = await fetch(`${BASE_URL}/chat/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentUser.token}`
+        },
+        body: JSON.stringify({ to: username })
+      });
+      const thread = await res.json();
+      selectUser(username, thread.id, el);
+    }
+
+    async function selectUser(username, threadId, el) {
+      selectedUser = username;
+      selectedThreadId = threadId;
+      document.querySelectorAll(".user").forEach(x => x.classList.remove("active"));
+      el.classList.add("active");
+      document.getElementById("selectedUser").textContent = username;
+
+      const res = await fetch(`${BASE_URL}/chat/messages/${threadId}`, {
+        headers: { Authorization: `Bearer ${currentUser.token}` }
+      });
+      const msgs = await res.json();
+      const box = document.getElementById("messages");
+      box.innerHTML = "";
+      msgs.forEach(m => appendMessage(m, m.from === currentUser.username));
+    }
+
+    async function sendMessage() {
+      const text = document.getElementById("messageInput").value.trim();
+      if (!text || !selectedUser || !selectedThreadId) return;
+
+      const res = await fetch(`${BASE_URL}/chat/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentUser.token}`
+        },
+        body: JSON.stringify({ to: selectedUser, message: text })
+      });
+
+      if (res.ok) {
+        appendMessage({ from: currentUser.username, message: text, time: new Date().toISOString() }, true);
+        document.getElementById("messageInput").value = "";
+      }
+    }
+
+    function appendMessage(msg, isOwn) {
+      const box = document.getElementById("messages");
+      const d = document.createElement("div");
+      d.className = "message " + (isOwn ? "sent" : "received");
+      d.innerHTML = `<div>${msg.message}</div><div class="timestamp">${new Date(msg.time).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>`;
+      box.appendChild(d);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function logout() {
+      localStorage.removeItem("chatspaceUser");
+      window.location.href = "/login.html";
+    }
+
+    async function getUserSid(username) {
+      const res = await fetch(`${BASE_URL}/chat/sid/${username}`);
+      const data = await res.json();
+      return data.sid;
+    }
+
+    async function setupMedia() {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      document.getElementById("localVideo").srcObject = localStream;
+    }
+
+    function setupPeer() {
+      peerConnection = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+
+      peerConnection.onicecandidate = e => {
+        if (e.candidate && targetSid) {
+          socket.emit("ice_candidate", { to: targetSid, candidate: e.candidate });
+        }
+      };
+
+      peerConnection.ontrack = e => {
+        document.getElementById("remoteVideo").srcObject = e.streams[0];
+      };
+
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+    }
+
+    function startCall() {
+  const callUrl = `/call.html?user=${currentUser.username}&target=${selectedUser}`;
+  window.open(callUrl, "_blank", "width=800,height=600");
+}
+
+
+    async function shareScreen() {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const videoTrack = screenStream.getTracks()[0];
+      const sender = peerConnection.getSenders().find(s => s.track.kind === 'video');
+      if (sender) sender.replaceTrack(videoTrack);
+    }
+    
+  </script>
+</body>
+</html>

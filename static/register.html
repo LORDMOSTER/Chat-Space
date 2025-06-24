@@ -1,0 +1,80 @@
+<!-- static/register.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Register | ChatSpace</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="auth-container" id="register-box">
+    <h2>📝 Register</h2>
+    <input type="text" id="reg-username" placeholder="Username">
+    <input type="email" id="reg-email" placeholder="Email">
+
+    <div class="password-field">
+      <input type="password" id="reg-password" placeholder="Password">
+      <span onclick="toggleVisibility('reg-password', this)">👁️</span>
+    </div>
+    <div class="password-field">
+      <input type="password" id="reg-confirm" placeholder="Confirm Password">
+      <span onclick="toggleVisibility('reg-confirm', this)">👁️</span>
+    </div>
+
+    <button onclick="register()">Register</button>
+    <p id="response" class="response-msg"></p>
+    <p>Already have an account? <a href="login.html">Login</a></p>
+  </div>
+
+  <div class="auth-container" id="verify-box" style="display:none;">
+    <h2>📧 Verify Email</h2>
+    <input type="email" id="verify-email" placeholder="Email" readonly>
+    <input type="text" id="verify-code" placeholder="Enter Verification Code">
+    <button onclick="verify()">Verify</button>
+    <button onclick="resend()">Resend Code</button>
+    <p id="timer">⏳ Waiting...</p>
+    <p id="response" class="response-msg"></p>
+  </div>
+
+  <script src="/static/js/main.js"></script>
+  <script>
+    function toggleVisibility(id, icon) {
+      const input = document.getElementById(id);
+      if (input.type === "password") {
+        input.type = "text";
+        icon.textContent = "🙈";
+      } else {
+        input.type = "password";
+        icon.textContent = "👁️";
+      }
+    }
+
+    function startCountdown(minutes = 10) {
+      let time = minutes * 60;
+      clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        const min = Math.floor(time / 60);
+        const sec = time % 60;
+        document.getElementById("timer").textContent =
+          `⏳ Code expires in: ${min}:${sec < 10 ? "0" + sec : sec}`;
+        time--;
+        if (time < 0) {
+          clearInterval(countdownInterval);
+          document.getElementById("timer").textContent = "⏰ Code expired.";
+        }
+      }, 1000);
+    }
+
+    // Show verification form after register
+    const origRegister = register;
+    register = async function () {
+      await origRegister();
+      const responseBox = document.getElementById("response");
+      if (responseBox.textContent.includes("sent")) {
+        document.getElementById("register-box").style.display = "none";
+        document.getElementById("verify-box").style.display = "block";
+      }
+    };
+  </script>
+</body>
+</html>

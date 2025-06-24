@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Verify Email</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="form-container">
+    <h2>Email Verification</h2>
+    <input type="email" id="verify_email" placeholder="Enter your email">
+    <input type="text" id="verify_code" placeholder="Enter 6-digit code">
+    <button onclick="verifyCode()">Verify</button>
+    <button onclick="resendCode()">Resend Code</button>
+    <p id="verify_msg"></p>
+  </div>
+  <script src="/static/js/verify.js"></script>
+</body>
+</html>

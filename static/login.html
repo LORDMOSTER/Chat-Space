@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🔐 Login - ChatSpace</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <style>
+    body {
+      background: #121212;
+      font-family: sans-serif;
+    }
+    .login-container {
+      max-width: 400px;
+      margin: 100px auto;
+      padding: 2rem;
+      background: #1e1e1e;
+      color: white;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+    }
+    .login-container h2 {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .input-group {
+      margin-bottom: 1rem;
+    }
+    .input-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+    .input-group input {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+    }
+    .toggle-password {
+      float: right;
+      margin-top: -30px;
+      margin-right: 10px;
+      cursor: pointer;
+      color: #aaa;
+    }
+    .login-btn {
+      width: 100%;
+      padding: 10px;
+      background: #4caf50;
+      border: none;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .error-msg {
+      color: red;
+      text-align: center;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="login-container">
+    <h2>🔐 Login to ChatSpace</h2>
+    <div class="input-group">
+      <label for="login-identifier">Username or Email</label>
+      <input type="text" id="login-identifier" />
+    </div>
+    <div class="input-group">
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" />
+      <span class="toggle-password" onclick="togglePassword()">👁</span>
+    </div>
+    <button class="login-btn" onclick="login()">🚪 Login</button>
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+
+  <script>
+    const BASE_URL = "http://localhost:8000";
+
+    function togglePassword() {
+      const input = document.getElementById("login-password");
+      input.type = input.type === "password" ? "text" : "password";
+    }
+
+    async function login() {
+      const identifier = document.getElementById("login-identifier").value.trim();
+      const password = document.getElementById("login-password").value.trim();
+      const errorMsg = document.getElementById("errorMsg");
+
+      if (!identifier || !password) {
+        errorMsg.textContent = "⚠️ Please enter both fields.";
+        return;
+      }
+
+      try {
+        const res = await fetch(`${BASE_URL}/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier, password })
+        });
+
+        const text = await res.text();
+        let data = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { detail: text || "Empty server response" };
+        }
+
+        if (res.ok && data.user && data.access_token) {
+  localStorage.setItem("chatspaceUser",JSON.stringify({
+      username: data.user.username,
+      token: data.access_token
+    })
+  );
+  window.location.href = "/chat.html";
+} else {
+          errorMsg.textContent = data?.detail || "Login failed.";
+        }
+      } catch (err) {
+        console.error("Login error:", err);
+        errorMsg.textContent = "🚫 Server error.";
+      }
+    }
+  </script>
+</body>
+</html>
